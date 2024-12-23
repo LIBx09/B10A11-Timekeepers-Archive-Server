@@ -91,7 +91,7 @@ async function run() {
             $pull: { likedBy: email },
             $inc: { likeCount: -1 },
           };
-          if (artifact.likedBy.length === 1) {
+          if (artifact.likedBy === 1) {
             update.$unset = { likedBy: "" };
           }
         } else {
@@ -101,13 +101,17 @@ async function run() {
           };
         }
 
-        await artifactsCollection.updateOne({ _id: new ObjectId(id) }, update);
+        const result = await artifactsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          update
+        );
 
         const updatedArtifact = await artifactsCollection.findOne({
           _id: new ObjectId(id),
         });
 
         res.status(200).send({
+          result,
           message: "Like/Unlike toggled successfully",
           likeCount: updatedArtifact.likeCount,
           likedBy: updatedArtifact.likedBy,
@@ -116,6 +120,43 @@ async function run() {
         console.error("Error updating like/unlike:", error.message);
         res.status(500).send({ error: "Internal Server Error" });
       }
+    });
+
+    // for display only like data in page
+    app.get("/artifacts/liked/:email", async (req, res) => {
+      const { email } = req?.params;
+      console.log("Fetching liked artifacts for email:", email);
+      try {
+        const likedArtifacts = await artifactsCollection
+          .find({ likedBy: email })
+          .toArray();
+        res.status(200).send(likedArtifacts);
+      } catch (error) {
+        console.error("Error fetching liked artifacts:", error.message);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    app.get("/artifacts/added/:email", async (req, res) => {
+      const email = req.params.email;
+      console.log("Querying artifacts for email:", email);
+      try {
+        const query = { adderEmail: email };
+        const addedArtifacts = await artifactsCollection.find(query).toArray();
+        if (!addedArtifacts) {
+          return res.status(404).send({ message: "No Added artifacts found" });
+        }
+        res.send(addedArtifacts);
+      } catch (error) {
+        console.error("Error fetching added artifacts", error.message);
+        res.status(500).send({ error: "Failed to fetch added artifacts" });
+      }
+    });
+
+    app.post("/artifacts", async (req, res) => {
+      const newArtifact = req.body;
+      const result = await artifactsCollection.insertOne(newArtifact);
+      res.send(result);
     });
 
     await client.db("admin").command({ ping: 1 });
