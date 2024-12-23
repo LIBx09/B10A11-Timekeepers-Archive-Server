@@ -65,16 +65,14 @@ async function run() {
     });
     //for like/unlike
     app.post("/artifacts/like-unlike/:id", async (req, res) => {
-      const { id } = req.params; // Artifact ID from the URL
-      const { email } = req.body; // User email from the request body
+      const { id } = req.params;
+      const { email } = req.body;
 
-      // Validate the ID
       if (!ObjectId.isValid(id)) {
         return res.status(400).send({ error: "Invalid ID format" });
       }
 
       try {
-        // Fetch the artifact by ID
         const artifact = await artifactsCollection.findOne({
           _id: new ObjectId(id),
         });
@@ -84,29 +82,36 @@ async function run() {
         }
 
         let update;
+        if (!artifact.likedBy) {
+          artifact.likedBy = [];
+        }
 
-        // Check if the artifact has a `likedBy` field
         if (artifact.likedBy && artifact.likedBy.includes(email)) {
-          // User already liked: Remove like
           update = {
-            $pull: { likedBy: email }, // Remove user email
-            $inc: { likeCount: -1 }, // Decrement the likeCount
+            $pull: { likedBy: email },
+            $inc: { likeCount: -1 },
           };
           if (artifact.likedBy.length === 1) {
             update.$unset = { likedBy: "" };
           }
         } else {
-          // User not liked: Add like
           update = {
-            $push: { likedBy: email }, // Add user email (create likedBy field if it doesn't exist)
-            $inc: { likeCount: 1 }, // Increment the likeCount
+            $push: { likedBy: email },
+            $inc: { likeCount: 1 },
           };
         }
 
-        // Update the artifact in the database
         await artifactsCollection.updateOne({ _id: new ObjectId(id) }, update);
 
-        res.status(200).send({ message: "Like/Unlike toggled successfully" });
+        const updatedArtifact = await artifactsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        res.status(200).send({
+          message: "Like/Unlike toggled successfully",
+          likeCount: updatedArtifact.likeCount,
+          likedBy: updatedArtifact.likedBy,
+        });
       } catch (error) {
         console.error("Error updating like/unlike:", error.message);
         res.status(500).send({ error: "Internal Server Error" });
