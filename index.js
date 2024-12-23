@@ -152,7 +152,7 @@ async function run() {
         res.status(500).send({ error: "Failed to fetch added artifacts" });
       }
     });
-
+    app.get("/", async (req, res) => {});
     app.post("/artifacts", async (req, res) => {
       const newArtifact = req.body;
       const result = await artifactsCollection.insertOne(newArtifact);
