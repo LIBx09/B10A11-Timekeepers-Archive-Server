@@ -136,10 +136,10 @@ async function run() {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
-
+    //get data by email
     app.get("/artifacts/added/:email", async (req, res) => {
       const email = req.params.email;
-      console.log("Querying artifacts for email:", email);
+      // console.log("Querying artifacts for email:", email);
       try {
         const query = { adderEmail: email };
         const addedArtifacts = await artifactsCollection.find(query).toArray();
@@ -152,7 +152,38 @@ async function run() {
         res.status(500).send({ error: "Failed to fetch added artifacts" });
       }
     });
-    app.get("/", async (req, res) => {});
+    //Update single data
+
+    app.put("/artifacts/update/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const filter = { _id: new ObjectId(id) };
+        const option = { upsert: true };
+        const updateData = req.body;
+        const updatedArtifact = {
+          $set: {
+            artifactName: updateData.artifactName,
+            discoveredBy: updateData.discoveredBy,
+            artifactType: updateData.artifactType,
+            artifactImage: updateData.artifactImage,
+            historicalContext: updateData.historicalContext,
+            discoveredAt: updateData.discoveredAt,
+            presentLocation: updateData.presentLocation,
+            createdAt: updateData.createdAt,
+          },
+        };
+        const result = await artifactsCollection.updateOne(
+          filter,
+          updatedArtifact,
+          option
+        );
+        res.send(result);
+      } catch (error) {
+        console.error("Error Update not held in artifacts", error.message);
+        res.status(500).send({ error: "Failed to update artifacts" });
+      }
+    });
+
     app.post("/artifacts", async (req, res) => {
       const newArtifact = req.body;
       const result = await artifactsCollection.insertOne(newArtifact);
