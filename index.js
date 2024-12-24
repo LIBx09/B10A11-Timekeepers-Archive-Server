@@ -30,9 +30,17 @@ async function run() {
     //for home page
     app.get("/artifacts/limit", async (req, res) => {
       const limit = 6;
-      const cursor = artifactsCollection.find().limit(limit);
-      const result = await cursor.toArray();
-      res.send(result);
+      try {
+        const cursor = artifactsCollection
+          .find()
+          .sort({ likeCount: -1 })
+          .limit(limit);
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching artifacts:", error.message);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
     });
     //for show all artifacts page
     app.get("/artifacts", async (req, res) => {
