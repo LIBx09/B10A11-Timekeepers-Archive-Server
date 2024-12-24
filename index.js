@@ -1,13 +1,35 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const app = express();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 //middle were
-app.use(cors());
+app.use(
+  cors({
+    origin: [`${process.env.CORS_CLIENT_URL}`],
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
+
+const verifyToken = (req, res, next) => {
+  const token = req.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  jwt.verify(token, process.env.ACCESS_WEB_TOKEN, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "unAuthorized Access" });
+    }
+    req.user = decoded;
+    next();
+  });
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.iciu9bb.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -25,6 +47,29 @@ async function run() {
     const artifactsCollection = client
       .db("TimekeepersArchiveDB")
       .collection("artifacts");
+
+    //Jwt APIs
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_WEB_TOKEN, {
+        expiresIn: "4h",
+      });
+
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: false,
+        })
+        .send({ success: true });
+    });
+    app.post("/logout", (req, res) => {
+      res
+        .clearCookie("token", {
+          httpOnly: true,
+          secure: false,
+        })
+        .send({ success: true });
+    });
 
     //Artifacts data collection
     //for home page
@@ -44,15 +89,18 @@ async function run() {
     });
     //for show all artifacts page
     app.get("/artifacts", async (req, res) => {
-      const cursor = artifactsCollection.find().toArray();
+      const cursor = artifactsCollection
+        .find()
+        .sort({ likeCount: 1 })
+        .toArray();
       const result = await cursor;
       res.send(result);
     });
+
     //for details page
     app.get("/artifacts/:id", async (req, res) => {
       const id = req.params.id;
 
-      // Validate the id
       if (!ObjectId.isValid(id)) {
         return res.status(400).send({ error: "Invalid ID format" });
       }
@@ -131,9 +179,14 @@ async function run() {
     });
 
     // for display only like data in page
-    app.get("/artifacts/liked/:email", async (req, res) => {
+    app.get("/artifacts/liked/:email", verifyToken, async (req, res) => {
       const { email } = req?.params;
-      console.log("Fetching liked artifacts for email:", email);
+
+      if (req.user.email !== email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      // console.log(req.cookies);
+      // console.log("Fetching liked artifacts for email:", email);
       try {
         const likedArtifacts = await artifactsCollection
           .find({ likedBy: email })
@@ -145,15 +198,23 @@ async function run() {
       }
     });
     //get data by email
-    app.get("/artifacts/added/:email", async (req, res) => {
+    app.get("/artifacts/added/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
-      // console.log("Querying artifacts for email:", email);
+      const { search } = req.query;
+
+      if (req.user.email !== email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
       try {
         const query = { adderEmail: email };
-        const addedArtifacts = await artifactsCollection.find(query).toArray();
-        if (!addedArtifacts) {
-          return res.status(404).send({ message: "No Added artifacts found" });
+
+        // Add search condition only if search is provided
+        if (search && search.trim() !== "") {
+          query.artifactName = { $regex: search, $options: "i" };
         }
+
+        const addedArtifacts = await artifactsCollection.find(query).toArray();
         res.send(addedArtifacts);
       } catch (error) {
         console.error("Error fetching added artifacts", error.message);
