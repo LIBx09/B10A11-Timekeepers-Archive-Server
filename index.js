@@ -152,8 +152,8 @@ async function run() {
         res.status(500).send({ error: "Failed to fetch added artifacts" });
       }
     });
-    //Update single data
 
+    //Update single data
     app.put("/artifacts/update/:id", async (req, res) => {
       const id = req.params.id;
       try {
@@ -182,6 +182,14 @@ async function run() {
         console.error("Error Update not held in artifacts", error.message);
         res.status(500).send({ error: "Failed to update artifacts" });
       }
+    });
+
+    //Delete method
+    app.delete("/artifacts/delete/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await artifactsCollection.deleteOne(query);
+      res.send(result);
     });
 
     app.post("/artifacts", async (req, res) => {
