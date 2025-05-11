@@ -10,7 +10,11 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 //middle were
 app.use(
   cors({
-    origin: [`${process.env.CORS_CLIENT_URL}`],
+    origin: [
+      "http://localhost:5173",
+      "https://timekeeper-s-archive-server.vercel.app",
+      "https://timekeeper-s-archive.firebaseapp.com",
+    ],
     credentials: true,
   })
 );
@@ -47,6 +51,9 @@ async function run() {
     const artifactsCollection = client
       .db("TimekeepersArchiveDB")
       .collection("artifacts");
+    const contactCollection = client
+      .db("TimekeepersArchiveDB")
+      .collection("contact");
 
     //Jwt APIs
     app.post("/jwt", (req, res) => {
@@ -58,7 +65,8 @@ async function run() {
       res
         .cookie("token", token, {
           httpOnly: true,
-          secure: false,
+          secure: process.env.NODE_ENV === "production" ? true : false,
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
         })
         .send({ success: true });
     });
@@ -70,7 +78,12 @@ async function run() {
         })
         .send({ success: true });
     });
-
+    //Contact data collection
+    app.post("/contact", async (req, res) => {
+      const contact = req.body;
+      const result = await contactCollection.insertOne(contact);
+      res.send(result);
+    });
     //Artifacts data collection
     //for home page
     app.get("/artifacts/limit", async (req, res) => {
@@ -185,8 +198,7 @@ async function run() {
       if (req.user.email !== email) {
         return res.status(403).send({ message: "forbidden access" });
       }
-      // console.log(req.cookies);
-      // console.log("Fetching liked artifacts for email:", email);
+
       try {
         const likedArtifacts = await artifactsCollection
           .find({ likedBy: email })
@@ -209,13 +221,13 @@ async function run() {
       try {
         const query = { adderEmail: email };
 
-        // Add search condition only if search is provided
         if (search && search.trim() !== "") {
           query.artifactName = { $regex: search, $options: "i" };
         }
 
         const addedArtifacts = await artifactsCollection.find(query).toArray();
         res.send(addedArtifacts);
+        // console.log("asd", addedArtifacts);
       } catch (error) {
         console.error("Error fetching added artifacts", error.message);
         res.status(500).send({ error: "Failed to fetch added artifacts" });
@@ -261,7 +273,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/artifacts", async (req, res) => {
+    app.post("/artifacts", verifyToken, async (req, res) => {
       const newArtifact = req.body;
       const result = await artifactsCollection.insertOne(newArtifact);
       res.send(result);
